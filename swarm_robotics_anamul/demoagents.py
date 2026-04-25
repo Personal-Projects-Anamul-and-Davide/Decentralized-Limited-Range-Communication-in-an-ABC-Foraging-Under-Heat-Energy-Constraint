@@ -19,119 +19,193 @@ class Creature(Agent):
         self.distance_moved = 0      # store how far moved this step (for energy cost)
 
     def step(self):
-        """
-        TODO: Main agent step (Person B).
-        1. inside_nest = (self.pos == self.model.nest_pos)
-        2. Call role-specific action:
-           if self.role == "nurse": self.nurse_action(inside_nest)
-           elif self.role == "forager": self.forager_action(inside_nest)
-           elif self.role == "scout": self.scout_action(inside_nest)
-        3. self.update_energy_temp(inside_nest)
-        4. self.check_death()
-        5. (Optional) Update signal memory: add any received signal types, keep last 5
-        """
-        pass
+        # 1. Check if agent is inside the nest
+        inside_nest = (self.pos == self.model.nest_pos)
+
+        # 2. Execute behavior based on role
+        if self.role == "nurse":
+            self.nurse_action(inside_nest)
+        elif self.role == "forager":
+            self.forager_action(inside_nest)
+        elif self.role == "scout":
+            self.scout_action(inside_nest)
+
+        # 3. Update energy and temperature
+        self.update_energy_temp(inside_nest)
+        # 4. Check if agent dies
+        self.check_death()
+        # 5. Update signal memory (last 5 signals)
+        for sig in self.received_signals:
+            self.signal_memory.append(sig["type"])
+        # Keep only last 5
+        self.signal_memory = self.signal_memory[-5:]
 
     # ---------- Person B: role actions ----------
     def nurse_action(self, inside_nest):
-        """
-        Nurse behavior: stay in nest, cool down, maybe switch to forager.
-        TODO: 
-        - Only act if inside_nest is True.
-        - Compute stimulus: count "FOOD" signals in self.signal_memory (max 5).
-          stimulus = min(1.0, food_count / 5)
-        - If stimulus > self.threshold: self.role = "forager"
-        Hint: self.signal_memory is a list of strings like "FOOD", "NEW_FOOD", "DANGER".
-        """
-        pass
+        if not inside_nest:
+            return
+
+        # Count FOOD signals in last 5 steps
+        food_count = self.signal_memory.count("FOOD")
+
+        # Normalize stimulus
+        stimulus = min(1.0, food_count / 5)
+
+        # Role switch
+        if stimulus > self.threshold:
+            self.role = "forager"
 
     def forager_action(self, inside_nest):
-        """
-        Forager behavior: move outside, find food, consume, return if exhausted.
-        TODO:
-        - If inside_nest: set self.role = "nurse" and return.
-        - Call self.move_toward_signals()   # Person A
-        - Check if current cell has food (self.model.food_grid[x][y] > 0):
-            - Reduce food by 1: self.model.food_grid[x][y] -= 1
-            - Increase energy: self.energy = min(100, self.energy + 2)
-            - Set self.signal_to_send = {"type": "FOOD", "strength": 0.8, "pos": self.pos}
-        - If self.temp > 40 or self.energy < 20:
-            - Move toward nest: self.move_toward(self.model.nest_pos)  # Person A
-        """
-        pass
+        # If returned to nest → become nurse
+        if inside_nest:
+            self.role = "nurse"
+            return
+
+        # Move (Person A function)
+        self.move_toward_signals()
+
+        x, y = self.pos
+
+        # Check food on current cell
+        if self.model.food_grid[x][y] > 0:
+            # Eat 1 unit
+            self.model.food_grid[x][y] -= 1
+
+            # Gain energy
+            self.energy = min(100, self.energy + 2)
+
+            # Send FOOD signal
+            self.signal_to_send = {
+                "type": "FOOD",
+                "strength": 0.8,
+                "pos": self.pos
+            }
+
+        # Danger / exhaustion -> go back
+        if self.temp > 40 or self.energy < 20:
+            self.move_toward(self.model.nest_pos)
 
     def scout_action(self, inside_nest):
-        """
-        Scout behavior: explore randomly, discover new rich clusters.
-        TODO:
-        - If inside_nest: self.role = "nurse" (or random choice) and return.
-        - Call self.random_walk()   # Person A
-        - (Optional) Track visited clusters: store set of cluster IDs.
-          If first time on a cell with food > 50 and cluster not visited:
-            self.signal_to_send = {"type": "NEW_FOOD", "strength": 1.0, "pos": self.pos}
-        - If self.temp > 41 or self.energy < 15:
-            self.move_toward(self.model.nest_pos)
-        """
-        pass
+        # If back to nest -> switch role
+        if inside_nest:
+            # Random choice
+            if self.model.random.random() < 0.5:
+                self.role = "nurse"
+            else:
+                self.role = "forager"
+            return
 
-    # ---------- Person A: movement methods ----------
+        # Explore randomly
+        self.random_walk()
+
+        x, y = self.pos
+
+        # Detect rich food
+        if self.model.food_grid[x][y] > 50:
+            cluster_id = (x, y)  # simple approximation
+
+            if cluster_id not in self.visited_clusters:
+                self.visited_clusters.add(cluster_id)
+
+                self.signal_to_send = {
+                    "type": "NEW_FOOD",
+                    "strength": 1.0,
+                    "pos": self.pos
+                }
+
+        # Danger condition
+        if self.temp > 41 or self.energy < 15:
+            self.move_toward(self.model.nest_pos)
+
+    # ---------- Person B: movement methods ----------
     def move_toward_signals(self):
-        """
-        Move toward strongest FOOD or NEW_FOOD signal.
-        TODO:
-        - Iterate self.received_signals, find signal with highest "strength"
-          where signal["type"] in ("FOOD", "NEW_FOOD").
-        - If found and random.random() < 0.7: self.move_toward(signal["pos"])
-        - Else: self.random_walk()
-        """
-        pass
+    # Filter only relevant signals
+        valid_signals = [
+            s for s in self.received_signals
+            if s["type"] in ("FOOD", "NEW_FOOD")
+        ]
+
+        # If there are signals, choose the strongest
+        if valid_signals:
+            strongest = max(valid_signals, key=lambda s: s["strength"])
+
+            # With probability 0.7 follow the signal
+            if self.model.random.random() < 0.7:
+                self.move_toward(strongest["pos"])
+                return
+
+        # Otherwise random movement
+        self.random_walk()
 
     def move_toward(self, target_pos):
-        """
-        Move agent toward target_pos using Chebyshev distance (max speed = model.max_speed).
-        TODO:
-        - Compute dx = target_pos[0] - self.pos[0], dy = target_pos[1] - self.pos[1]
-        - step_x = max(-self.model.max_speed, min(self.model.max_speed, dx))
-        - step_y = max(-self.model.max_speed, min(self.model.max_speed, dy))
-        - new_pos = (self.pos[0] + step_x, self.pos[1] + step_y)
-        - Clamp to grid bounds (0 to width-1, 0 to height-1).
-        - Store distance moved: self.distance_moved = max(abs(step_x), abs(step_y))
-        - Use self.model.grid.move_agent(self, new_pos)
-        """
-        pass
+        x, y = self.pos
+        tx, ty = target_pos
+
+        # Compute direction vector
+        dx = tx - x
+        dy = ty - y
+
+        # Clamp movement to max_speed
+        step_x = max(-self.model.max_speed, min(self.model.max_speed, dx))
+        step_y = max(-self.model.max_speed, min(self.model.max_speed, dy))
+
+        # New position
+        new_x = x + step_x
+        new_y = y + step_y
+
+        # Clamp inside grid bounds
+        new_x = max(0, min(self.model.width - 1, new_x))
+        new_y = max(0, min(self.model.height - 1, new_y))
+
+        # Chebyshev distance = max(|dx|, |dy|)
+        self.distance_moved = max(abs(step_x), abs(step_y))
+
+        # Move agent
+        self.model.grid.move_agent(self, (new_x, new_y))
 
     def random_walk(self):
-        """
-        Random movement within max_speed.
-        TODO:
-        - dx = self.model.random.randint(-self.model.max_speed, self.model.max_speed)
-        - dy = self.model.random.randint(-self.model.max_speed, self.model.max_speed)
-        - new_x = max(0, min(self.model.width-1, self.pos[0] + dx))
-        - new_y = max(0, min(self.model.height-1, self.pos[1] + dy))
-        - self.distance_moved = max(abs(dx), abs(dy))
-        - self.model.grid.move_agent(self, (new_x, new_y))
-        """
-        pass
+        # Random step in both directions
+        dx = self.model.random.randint(-self.model.max_speed, self.model.max_speed)
+        dy = self.model.random.randint(-self.model.max_speed, self.model.max_speed)
+
+        x, y = self.pos
+
+        # Compute new position
+        new_x = x + dx
+        new_y = y + dy
+
+        # Clamp to grid bounds
+        new_x = max(0, min(self.model.width - 1, new_x))
+        new_y = max(0, min(self.model.height - 1, new_y))
+
+        # Store distance (Chebyshev)
+        self.distance_moved = max(abs(dx), abs(dy))
+
+        # Move agent
+        self.model.grid.move_agent(self, (new_x, new_y))
 
     # ---------- Person B: energy, temperature, death ----------
     def update_energy_temp(self, inside_nest):
-        """
-        Update energy and temperature based on time, movement, and location.
-        TODO:
-        - Energy decay: self.energy -= 0.1 + (self.distance_moved * 0.05)
-        - Temperature: if inside_nest: self.temp -= 0.5 else: self.temp += 0.3
-        - Clamp: self.energy = max(0, min(100, self.energy))
-                 self.temp = max(0, min(42, self.temp))
-        - Reset self.distance_moved = 0 for next step.
-        """
-        pass
+        # Energy decay
+        self.energy -= 0.1 + (self.distance_moved * 0.05)
+
+        # Temperature dynamics
+        if inside_nest:
+            self.temp -= 0.5
+        else:
+            self.temp += 0.3
+
+        # Clamp values
+        self.energy = max(0, min(100, self.energy))
+        self.temp = max(0, min(42, self.temp))
+
+        # Reset movement
+        self.distance_moved = 0
 
     def check_death(self):
         """
         Remove agent if energy <= 0 or temp >= 42.
-        TODO:
-        - if self.energy <= 0 or self.temp >= 42:
+        """
+        if self.energy <= 0 or self.temp >= 42:
             self.model.grid.remove_agent(self)
             self.model.schedule.remove(self)
-        """
-        pass
