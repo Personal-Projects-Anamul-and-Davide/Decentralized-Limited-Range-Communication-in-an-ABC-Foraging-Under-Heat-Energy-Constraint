@@ -8,20 +8,37 @@ import pandas as pd
 
 def run_experiment(seeds=range(1, 21)):
     """
-    Run SwarmModel for each seed, record survival time (steps until all dead).
-    TODO:
-    - results = []
-    - for seed in seeds:
-        - model = SwarmModel(seed=seed)
-        - while model.running:
-            model.step()
-        - survival_time = model.schedule.steps   # steps executed
-        - results.append({"seed": seed, "survival_time": survival_time})
-    - df = pd.DataFrame(results)
-    - df.to_csv("survival_results.csv", index=False)
-    - return df
+    Run SwarmModel for multiple seeds and collect survival times.
     """
-    pass
+
+    results = []
+
+    for seed in seeds:
+        # Initialize model with a fixed seed
+        model = SwarmModel(seed=seed)
+
+        # Run simulation until all agents die
+        while model.running:
+            model.step()
+
+        # Number of steps survived
+        survival_time = model.schedule.steps
+
+        # Store result
+        results.append({
+            "seed": seed,
+            "survival_time": survival_time
+        })
+
+        print(f"Seed {seed} completed → survival time: {survival_time}")
+
+    # Convert to DataFrame
+    df = pd.DataFrame(results)
+
+    # Save results
+    df.to_csv("survival_results.csv", index=False)
+
+    return df
 
 if __name__ == "__main__":
     run_experiment()

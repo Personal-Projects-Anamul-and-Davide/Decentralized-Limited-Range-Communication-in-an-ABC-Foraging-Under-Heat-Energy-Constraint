@@ -9,16 +9,25 @@ from model import SwarmModel
 
 def agent_portrayal(agent):
     """
-    Return dictionary for drawing agent.
-    TODO:
-    - Map role to color:
-        "nurse" -> "blue"
-        "forager" -> "green"
-        "scout" -> "orange"
-    - Shape = "circle", r = 2, Filled = "true"
-    - Optionally add text for energy? Not needed.
+    Defines how each agent is drawn on the grid.
     """
-    return {"Shape": "circle", "r": 2, "Color": "gray", "Filled": "true"}
+
+    # Map roles to colors
+    if agent.role == "nurse":
+        color = "blue"
+    elif agent.role == "forager":
+        color = "green"
+    elif agent.role == "scout":
+        color = "orange"
+    else:
+        color = "gray"  # fallback (should not happen)
+
+    return {
+        "Shape": "circle",
+        "r": 0.8,
+        "Color": color,
+        "Filled": "true"
+    }
 
 grid = CanvasGrid(agent_portrayal, 60, 60, 600, 600)
 chart = ChartModule([{"Label": "Alive", "Color": "black"}])
