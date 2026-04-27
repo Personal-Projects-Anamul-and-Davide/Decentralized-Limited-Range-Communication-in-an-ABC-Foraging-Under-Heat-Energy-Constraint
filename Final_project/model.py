@@ -23,14 +23,23 @@ class SwarmModel(Model):
         self.signal_range=signal_range
         self.max_speed=max_speed
         self.__seed=seed
-        self.nest_pos=(width/2,height/2)
+        self.nest_pos=(width//2,height//2)
         self.grid=MultiGrid(width,height,torus=False)
         self.schedule=RandomActivation(self)        
         self.food_grid=generate_food_clusters(width,height,num_clusters,food_coverage,self.random)      
-        for i in range (self.num_agents):
-            agent=Creature(creat_id=i, model=self, role="nurse", energy=100, temp=36, threshold=self.random.uniform(0.3,0.7))
+        
+        for i in range(self.num_agents):
+            rand = self.random.random()
+            if rand < 0.1:
+                role = "forager"
+            elif rand < 0.2:
+                role = "scout"
+            else:
+                role = "nurse"
+
+            agent = Creature(i, self, role, 100, 36, self.random.uniform(0.3, 0.7))
             self.schedule.add(agent)
-            self.grid.place_agent(agent,self.nest_pos)
+            self.grid.place_agent(agent, self.nest_pos)
 
         model_reporters = {"SurvivalTime": lambda m: m.schedule.steps if not m.schedule.agents else None,"Alive": lambda m: len(m.schedule.agents)}
         agent_reporters = {"Energy": "energy", "Temp": "temp", "Role": "role"}
@@ -38,9 +47,11 @@ class SwarmModel(Model):
         model_reporters=model_reporters,
         agent_reporters=agent_reporters
         )
+        self.running = True
 
 
     def step(self):
+        print(f"Step {self.schedule.steps}")
         self.schedule.step()
         self.communication_step()
         self.datacollector.collect(self)
@@ -54,7 +65,7 @@ class SwarmModel(Model):
         for agent in self.schedule.agents:
             if agent.signal_to_send is not None:
                 neighbors=self.grid.get_neighbors(agent.pos, moore=True, radius=self.signal_range )
-            for neighbor in neighbors:
-                neighbor.received_signals.append(agent.signal_to_send.copy())
+                for neighbor in neighbors:
+                    neighbor.received_signals.append(agent.signal_to_send.copy())
         for agent in self.schedule.agents:
             agent.signal_to_send=None
